@@ -13,7 +13,7 @@ from haversine import haversine
 resolution = "1" #options are "1" or "1/3"
 heightScalar = 1 #multiplier for height
 outputFileName = "test" #name for output file
-unit = 'mm' #options are 'm' (metric, 1cm is 1km) or 'in' (imperial, 1in is 1mi)
+unit = 'm' #options are 'm' (metric, 1cm is 1km) or 'in' (imperial, 1in is 1mi)
 
 boxBR = [botLat,rightLong]
 boxTL = [topLat,leftLong]
