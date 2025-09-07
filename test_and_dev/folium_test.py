@@ -1,18 +1,81 @@
+from flask import Flask, request, jsonify
 import folium
 from folium.plugins import Draw
-import webbrowser
-import os
 
-# Create the map centered on the US
-m = folium.Map(location=[39, -98], zoom_start=4)
+app = Flask(__name__)
 
-# Add drawing tools (rectangle, polygon, etc.)
-Draw(export=True).add_to(m)
+def run_my_program(bbox):
+    # Replace with your real processing function
+    #print("Running backend program...")
 
-# Save map to an HTML file
-map_file = "map.html"
-m.save(map_file)
+    return {"processed_coords": bbox, "status": "ok"}
 
-# Open in default browser
-full_path = os.path.abspath(map_file)
-webbrowser.open("file://" + full_path)
+@app.route("/")
+def index():
+    # Create map
+    m = folium.Map(location=[39, -98], zoom_start=4, width="100%", height="100%")
+    Draw(
+        export=False, 
+        draw_options={
+            "polyline": False,
+            "polygon": False,
+            "circle": False,
+            "circlemarker": False,
+            "marker": False,
+            "rectangle": True
+        },
+        edit_options={"edit": True, "remove": True}
+    ).add_to(m)
+
+    # CSS to fix map size + add a border
+    map_id = m.get_name()
+    css = f"""
+    <style>
+      html, body {{ height: auto; margin: 0; padding: 0; }}
+      #{map_id} {{
+        width: 600px !important;
+        height: 400px !important;
+        margin: 20px;
+        border: 2px solid #000;
+      }}
+    </style>
+    """
+    m.get_root().header.add_child(folium.Element(css))
+
+    # Add external JS reference
+    script_tag = '<script src="/static/map.js"></script>'
+    m.get_root().html.add_child(folium.Element(script_tag))
+
+    # Add button outside the map
+    button_html = """
+    <div style="text-align:center; margin:10px;">
+      <button id="sendButton">Send Rectangle</button>
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(button_html))
+
+    return m.get_root().render()
+
+@app.route("/process", methods=["POST"])
+def process():
+    data = request.json or {}
+    coords = data.get('geometry', {}).get('coordinates', [[]])
+
+    ring = coords[0] if coords and isinstance(coords[0], list) else []
+    if not ring:
+        return jsonify(error="No coordinates received"), 400
+
+    # GeoJSON order = [lon, lat]
+    lons = [pt[0] for pt in ring]
+    lats = [pt[1] for pt in ring]
+
+    bbox = {
+        "min_lon": min(lons), "max_lon": max(lons),
+        "min_lat": min(lats), "max_lat": max(lats)
+    }
+
+    result = run_my_program(bbox)
+    return jsonify(result=result)
+
+if __name__ == "__main__":
+    app.run(debug=True)

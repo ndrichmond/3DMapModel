@@ -1,77 +1,82 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 import folium
 from folium.plugins import Draw
+from generator import coords2threeD
 
 app = Flask(__name__)
 
-@app.route('/')
+def run_my_program(bbox):
+    # Replace with your real processing function
+    #print("Running backend program...")
+    coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'])
+    return {"file_generated_at": bbox, "status": "ok"}
+
+@app.route("/")
 def index():
-    # Generate map with drawing tool
-    m = folium.Map(location=[39, -98], zoom_start=4)
-    Draw(export=False).add_to(m)
+    # Create map
+    m = folium.Map(location=[39, -98], zoom_start=4, width="100%", height="100%")
+    Draw(
+        export=False, 
+        draw_options={
+            "polyline": False,
+            "polygon": False,
+            "circle": False,
+            "circlemarker": False,
+            "marker": False,
+            "rectangle": True
+        },
+        edit_options={"edit": True, "remove": True}
+    ).add_to(m)
 
-
-    mapId = m.get_name()
-    # Inject custom JavaScript
-    custom_js = """
-    <script>
-    window.addEventListener("load", function() {
-        // Find the folium Leaflet map variable dynamically
-        var mapId = null;
-        for (var key in window) {
-            if (window[key] instanceof L.Map) {
-                mapId = window[key];
-                break;
-            }
-        }
-
-        if (!mapId) {
-            console.error("No Leaflet map found!");
-            return;
-        }
-
-        var drawnItems = new L.FeatureGroup();
-        mapId.addLayer(drawnItems);
-
-        mapId.on(L.Draw.Event.CREATED, function (e) {
-            var layer = e.layer;
-            drawnItems.addLayer(layer);
-
-            var geojson = layer.toGeoJSON();
-            console.log("Draw event fired:", geojson);
-
-            fetch('/process', {
-                method: 'POST',
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(geojson)
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert("Server response: " + JSON.stringify(data));
-            });
-        });
-    });
-    </script>
+    # CSS to fix map size + add a border
+    map_id = m.get_name()
+    css = f"""
+    <style>
+      html, body {{ height: auto; margin: 0; padding: 0; }}
+      #{map_id} {{
+        width: 600px !important;
+        height: 400px !important;
+        margin: 20px;
+        border: 2px solid #000;
+      }}
+    </style>
     """
+    m.get_root().header.add_child(folium.Element(css))
 
-    m.get_root().html.add_child(folium.Element(custom_js))
+    # Add external JS reference
+    script_tag = '<script src="/static/map.js"></script>'
+    m.get_root().html.add_child(folium.Element(script_tag))
 
-    return m.get_root().render()  # serve the map directly
+    # Add button outside the map
+    button_html = """
+    <div style="text-align:center; margin:10px;">
+      <button id="sendButton">Send Rectangle</button>
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(button_html))
 
-@app.route('/process', methods=['POST'])
+    return m.get_root().render()
+
+@app.route("/process", methods=["POST"])
 def process():
-    data = request.json  # incoming GeoJSON from frontend
-    # Extract bounds (lat/lon of rectangle corners)
-    coords = data['geometry']['coordinates'][0]  
-    # Run your existing program with coords
-    result = my_program(coords)  
+    data = request.json or {}
+    coords = data.get('geometry', {}).get('coordinates', [[]])
 
-    print(result)
-    return True #jsonify(result=result)
+    ring = coords[0] if coords and isinstance(coords[0], list) else []
+    if not ring:
+        return jsonify(error="No coordinates received"), 400
 
-def my_program(coords):
-    # Dummy example: just return corners
-    return {"corners": coords}
+    # GeoJSON order = [lon, lat]
+    lons = [pt[0] for pt in ring]
+    lats = [pt[1] for pt in ring]
+
+    bbox = {
+        "min_lon": min(lons), "max_lon": max(lons),
+        "min_lat": min(lats), "max_lat": max(lats)
+    }
+
+    result = run_my_program(bbox)
+    return jsonify(result=result)
 
 if __name__ == "__main__":
     app.run(debug=True)
