@@ -17,13 +17,20 @@ window.addEventListener('load', function() {
   // Save the last drawn rectangle
   mapVar.on(L.Draw.Event.CREATED, function(e) {
     var layer = e.layer;
+    layer.off('click');
     drawnItems.addLayer(layer);
-    lastLayer = layer;
+    lastLayer = layer;  
+  });
+
+  // When a shape is deleted, update drawnItems + lastLayer
+  mapVar.on(L.Draw.Event.DELETED, function(e) {
+  drawnItems.clearLayers();
+  lastLayer = null;
   });
 
   // Button click handler
   document.getElementById("sendButton").addEventListener("click", function() {
-    if (!lastLayer) {
+    if (drawnItems.getLayers().length === 0) {
       alert("Please draw a rectangle first!");
       return;
     }

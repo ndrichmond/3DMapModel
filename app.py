@@ -1,4 +1,5 @@
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify, stream_with_context
+import subprocess
 import folium
 from folium.plugins import Draw
 from generator import coords2threeD
@@ -8,7 +9,7 @@ app = Flask(__name__)
 def run_my_program(bbox):
     # Replace with your real processing function
     #print("Running backend program...")
-    coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'])
+    response = coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'])
     return {"file_generated_at": bbox, "status": "ok"}
 
 @app.route("/")
