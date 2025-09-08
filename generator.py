@@ -4,6 +4,8 @@ import requests
 import numpy
 import rasterio
 import wget
+import trimesh
+import time
 from stl import mesh
 from haversine import haversine
 
@@ -19,7 +21,6 @@ unit = 'm' #options are 'm' (metric, 1cm is 1km) or 'in' (imperial, 1in is 1mi)
 '''
 
 def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296212,RL=-122.029142,resolution="1",heightScalar=1,unit='m'):
-    
     (topLat,leftLong) = (TL, LL)
     (botLat,rightLong) = (BL, RL)
 
@@ -34,7 +35,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
     absolute_path = os.path.dirname(__file__)
 
     def generateSTL(heights,widthMult,heightMult):
-
+        yield "Generating STL file..."
         print("\nGenerating STL file...")
         lenDataset =  len(heights)
         widthDataset =len(heights[0])
@@ -192,22 +193,21 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
 
         payload = {}
         headers = {}
-
+        yield "Attempting request..."
         print("\nAttempting request...")
 
         response = requests.request("GET", url, headers=headers, data=payload)
         #print(response.text)
         jsonDict = json.loads(response.text)
 
+        yield("Request successful")
         print("Request complete")
 
         #print(jsonDict["items"])
 
         #a list of all the files that contain the specified bounding box 
         #and their corresponding download urls
-        nameUrlDict = {
-
-        }
+        nameUrlDict = {}
 
         count = 0
         resolution1  = ''
@@ -242,9 +242,11 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
                     print("File " + key + " already downloaded")
                     keyInList = True
             if not(keyInList):
+                yield "Downloading necessary files..."
                 print("Downloading " + key + " file:")
                 wget.download(nameUrlDict[key] , full_path)
                 print("")
+        yield "All files acquired"
         print("All files acquired")
 
         # prints all files
@@ -263,10 +265,17 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
                 if name in dir_list[i]:
                     fileList.append(dir_list[i])
                 i +=1
-
+        
         return fileList
 
-    fileList = getFiles(botLat,leftLong,topLat,rightLong,resolution)
+    output = getFiles(botLat,leftLong,topLat,rightLong,resolution)
+    try:
+        while True:
+            yield(next(output))
+    except StopIteration as e:
+        finalOutput = e.value
+
+    fileList = finalOutput
 
     #print(fileList)
 
@@ -453,11 +462,8 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
 
     #print(pixelHeight,pixelWidth)
     #print(pixelHeight/pixelWidth)
-
     #print(elevationData)
-
     #print(startRow,startCol,endRow,endCol)
-
     #generate a smaller dataset to work with instead of the entire map
 
     i = startRow
@@ -470,7 +476,24 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         i+=1
 
     #print(startRow,startCol,endRow,endCol)
-    generateSTL(smallData,pixelHeight,pixelWidth)
+    for msg in generateSTL(smallData,pixelHeight,pixelWidth):
+        yield msg
+
+    def convert_stl_to_glb(input_stl_path, output_glb_path):
+        try:
+            # Load the STL file
+            mesh = trimesh.load(input_stl_path)
+
+            # Export the mesh as a GLB file
+            mesh.export(output_glb_path, file_type='glb')
+
+            print(f"Successfully converted '{input_stl_path}' to '{output_glb_path}'")
+        except Exception as e:
+            print(f"Error during conversion: {e}")
+    yield "Converting to .glb"
+    convert_stl_to_glb(os.path.join('STL_Files',outputFileName + '.stl'), os.path.join('static','glb_files',outputFileName + '.glb'))
+    yield "Complete!"
 
 if __name__ == "__main__":
-    coords2threeD()
+    for val in coords2threeD():
+        pass

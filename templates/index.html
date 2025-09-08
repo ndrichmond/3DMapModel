@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Map & 3D Preview</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Left side: Map + Button -->
+        <div class="left-column">
+            <div id="map-container">
+                {{ map_html | safe }}
+            </div>
+            
+            <div class="button-container">
+                <button id="sendButton">Send Rectangle</button>
+            </div>
+        </div>  
+
+        <!-- Right side: 3D preview -->
+        <div id="viewer-container">
+            <model-viewer id ="previewModel"
+                          src=""
+                          alt="Loading 3D preview"  
+                          camera-controls 
+                          camera-orbit="0deg 150deg 500m"
+                          style="width: 100%; height: 100%; background-color: #999;">
+            </model-viewer>
+            <div id="LoadingTextOverlay">
+                Preview Loading...
+            </div>
+            
+            <div id="BeginningTextOverlay">
+                Select an area for a preview!
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='map.js') }}"></script>
+</body>
+</html>

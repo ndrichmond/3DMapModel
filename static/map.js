@@ -1,13 +1,18 @@
 window.addEventListener('load', function() {
+
+  const loadingOverlay = document.getElementById('LoadingTextOverlay');
+  const beginningOverlay = document.getElementById('BeginningTextOverlay');
+
+  function updateLoadingText(newText) {
+    loadingOverlay.textContent = newText;
+  }
+
   // Find the Leaflet map instance
   var mapVar = null;
   for (var k in window) {
     if (window[k] instanceof L.Map) { mapVar = window[k]; break; }
   }
   if (!mapVar) { console.error("Leaflet map not found"); return; }
-
-  // Fix tile layout after CSS resize
-  setTimeout(function(){ try { mapVar.invalidateSize(); } catch(e) {} }, 200);
 
   var drawnItems = new L.FeatureGroup();
   mapVar.addLayer(drawnItems);
@@ -34,6 +39,23 @@ window.addEventListener('load', function() {
       alert("Please draw a rectangle first!");
       return;
     }
+    beginningOverlay.style.opacity = "0";
+    loadingOverlay.style.opacity = "1"
+
+    // Logs incoming messages about the status of the request
+    const eventSource = new EventSource('/stream');
+    eventSource.onmessage = function(e) {
+      console.log(e.data);
+      updateLoadingText(e.data)
+      if (e.data === "Complete!") {
+        //console.log("Closing SSE");
+        modelViewer = document.getElementById('previewModel');
+        loadingOverlay.style.opacity = "0";
+        modelViewer.src = `/static/glb_files/default.glb?cachebust=${Date.now()}`;
+        eventSource.close();
+      }
+    };
+
     var geojson = lastLayer.toGeoJSON();
 
     fetch('/process', {

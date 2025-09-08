@@ -1,23 +1,23 @@
-from flask import Flask, Response, request, jsonify, stream_with_context
+from flask import Flask, Response, request, jsonify, render_template
 import subprocess
 import folium
 from folium.plugins import Draw
 from generator import coords2threeD
+import time
 
 app = Flask(__name__)
-
+bbox = {}
 def run_my_program(bbox):
     # Replace with your real processing function
     #print("Running backend program...")
-    response = coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'])
+    coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'])
     return {"file_generated_at": bbox, "status": "ok"}
 
 @app.route("/")
 def index():
-    # Create map
-    m = folium.Map(location=[39, -98], zoom_start=4, width="100%", height="100%")
+    m = folium.Map(location=[39, -98], zoom_start=4,tiles=None)
     Draw(
-        export=False, 
+        export=False,
         draw_options={
             "polyline": False,
             "polygon": False,
@@ -29,34 +29,26 @@ def index():
         edit_options={"edit": True, "remove": True}
     ).add_to(m)
 
-    # CSS to fix map size + add a border
-    map_id = m.get_name()
-    css = f"""
-    <style>
-      html, body {{ height: auto; margin: 0; padding: 0; }}
-      #{map_id} {{
-        width: 600px !important;
-        height: 400px !important;
-        margin: 20px;
-        border: 2px solid #000;
-      }}
-    </style>
-    """
-    m.get_root().header.add_child(folium.Element(css))
+    # Street view (OpenStreetMap)
+    folium.TileLayer(
+        tiles='OpenStreetMap',
+        name='Street Map',
+        show=True,
+        control=True
+    ).add_to(m)
 
-    # Add external JS reference
-    script_tag = '<script src="/static/map.js"></script>'
-    m.get_root().html.add_child(folium.Element(script_tag))
+    # Satellite view (Esri)
+    folium.TileLayer(
+        tiles='Esri.WorldImagery',
+        name='Satellite',
+        show=False,
+        control=True
+    ).add_to(m)
 
-    # Add button outside the map
-    button_html = """
-    <div style="text-align:center; margin:10px;">
-      <button id="sendButton">Send Rectangle</button>
-    </div>
-    """
-    m.get_root().html.add_child(folium.Element(button_html))
+    folium.LayerControl().add_to(m)
 
-    return m.get_root().render()
+    map_html = m.get_root().render()
+    return render_template("index.html", map_html=map_html)
 
 @app.route("/process", methods=["POST"])
 def process():
@@ -70,14 +62,23 @@ def process():
     # GeoJSON order = [lon, lat]
     lons = [pt[0] for pt in ring]
     lats = [pt[1] for pt in ring]
-
+    global bbox
     bbox = {
         "min_lon": min(lons), "max_lon": max(lons),
         "min_lat": min(lats), "max_lat": max(lats)
     }
 
-    result = run_my_program(bbox)
-    return jsonify(result=result)
+    #result = run_my_program(bbox)
+    return {"file_generated_at": bbox, "status": "ok"}
+
+@app.route("/stream")
+def stream():
+    # Example SSE generator
+    def generate():
+        for update in coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon']):
+            yield f"data: {update}\n\n"
+    return Response(generate(), mimetype='text/event-stream')
 
 if __name__ == "__main__":
     app.run(debug=True)
+ 
