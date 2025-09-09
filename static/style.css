@@ -1,67 +1,63 @@
-body {
-    font-family: Arial, sans-serif;
+/* Full height for body */
+html, body {
+    height: 100%;
     margin: 0;
-    padding: 0;
 }
 
-/* Main container: map+button on left, preview on right */
-.main-container {
-    display: flex;
-    gap: 20px; /* space between left and right */
-    padding: 20px;
+/* Map container styling */
+#map-container {
+    min-height: 0;                 
+    border: 2px solid #000;        
+    border-radius: 0.25rem;        
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+    background-color: #fff;        
+    flex-grow: 1;                   
 }
 
-/* Left column: map on top, button at bottom */
-.left-column {
+/* Right column 3D viewer is flex column */
+.viewer-container {
     display: flex;
     flex-direction: column;
-    gap: 20px;
 }
 
-/* Map container */
-#map-container {
-    width: 600px;
-    height: 400px;
-    border: 2px solid #000;
+/* Overlays for model viewer */
+.overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: #f8f9fa;       
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.15);
+    text-align: center;
+    z-index: 10;
 }
 
-/* Button container */
-.button-container {
-    text-align: left;
+/* Optional fade-in/out animation for overlays */
+.overlay.fade-in {
+    animation: fadeIn 0.5s ease forwards;
+}
+.overlay.fade-out {
+    animation: fadeOut 0.5s ease forwards;
 }
 
-/* 3D viewer container */
-#viewer-container {
-    position: relative;
-    width: 600px;
-    height: 400px;
-    border: 2px solid #000;
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
-#LoadingTextOverlay {
-    position: absolute;       /* absolute inside the relative container */
-    top: 15%;                 /* vertical center */
-    left: 50%;                /* horizontal center */
-    transform: translate(-50%, -50%); /* shift by half width & height to truly center */
-    color: white;
-    font-size: 16px;
-    text-align: center;       /* center multi-line text */
-    pointer-events: none;     /* lets clicks pass through */
-
-    opacity: 0;
-    transition: opacity 0.8s ease;
+@keyframes fadeOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
 }
 
-#BeginningTextOverlay {
-    position: absolute;       /* absolute inside the relative container */
-    top: 50%;                 /* vertical center */
-    left: 50%;                /* horizontal center */
-    transform: translate(-50%, -50%); /* shift by half width & height to truly center */
-    color: white;
-    font-size: 16px;
-    text-align: center;       /* center multi-line text */
-    pointer-events: none;     /* lets clicks pass through */
+/* Top control bar spacing */
+.top-controls {
+    gap: 0.5rem;
+}
 
-    opacity: 1;
-    transition: opacity 0.8s ease;
+.top-controls .btn,
+.top-controls input.form-control {
+    margin-right: 0.5rem;
 }

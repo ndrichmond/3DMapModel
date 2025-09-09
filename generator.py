@@ -6,6 +6,7 @@ import rasterio
 import wget
 import trimesh
 import time
+import math
 from stl import mesh
 from haversine import haversine
 
@@ -27,15 +28,18 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
     boxBR = [BL,RL]
     boxTL = [TL,LL]
 
+    proceed = True
+
     if abs(boxBR[0] - boxTL[0]) > 1 or abs(boxBR[1]-boxTL[1]) > 1 or (resolution == "1/3" and (abs(boxBR[0] - boxTL[0]) > 0.5 or abs(boxBR[1]-boxTL[1]) > 0.5)):
         print("Area too big, pick a new area")
-        exit()
+        yield {"data": "massiveArea", "status":"failure"}
+        proceed = False
 
 
     absolute_path = os.path.dirname(__file__)
 
     def generateSTL(heights,widthMult,heightMult):
-        yield "Generating STL file..."
+        yield {"data":"Generating STL file...", "status": "ok"}
         print("\nGenerating STL file...")
         lenDataset =  len(heights)
         widthDataset =len(heights[0])
@@ -165,15 +169,13 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
             for j in range(3):
                 shape.vectors[i][j] = vertices[f[j], :]
 
-        # Write the mesh to file "cube.stl"
-
-        relative_path = "STL_Files/"
-        full_path = os.path.join(absolute_path, relative_path)
+        #relative_path = "STL_Files"
+        full_path = os.path.join(absolute_path, "STL_Files/","gen/")
         fileName = full_path + outputFileName + ".stl"
         #print(fileName)
-
+        shape.rotate([0,0,1],math.radians(90))
         shape.save(fileName)
-        print("File generated!\n")
+        print("File generated!")
 
     def getFiles(botLat,leftLong,topLat,rightLong,resolution):
 
@@ -193,14 +195,14 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
 
         payload = {}
         headers = {}
-        yield "Attempting request..."
+        yield {"data": "Attempting request...", "status": "ok"}
         print("\nAttempting request...")
 
         response = requests.request("GET", url, headers=headers, data=payload)
         #print(response.text)
         jsonDict = json.loads(response.text)
 
-        yield("Request successful")
+        yield{"data": "Request successful", "status": "ok"}
         print("Request complete")
 
         #print(jsonDict["items"])
@@ -242,11 +244,11 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
                     print("File " + key + " already downloaded")
                     keyInList = True
             if not(keyInList):
-                yield "Downloading necessary files..."
+                yield {"data": "Downloading necessary files (this may take a minute)", "status": "ok"}
                 print("Downloading " + key + " file:")
                 wget.download(nameUrlDict[key] , full_path)
                 print("")
-        yield "All files acquired"
+        yield {"data": "All files acquired", "status": "ok"}
         print("All files acquired")
 
         # prints all files
@@ -268,232 +270,237 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         
         return fileList
 
-    output = getFiles(botLat,leftLong,topLat,rightLong,resolution)
-    try:
-        while True:
-            yield(next(output))
-    except StopIteration as e:
-        finalOutput = e.value
+    if proceed:
+        output = getFiles(botLat,leftLong,topLat,rightLong,resolution)
+        try:
+            while True:
+                yield(next(output))
+        except StopIteration as e:
+            finalOutput = e.value
 
-    fileList = finalOutput
+        fileList = finalOutput
 
-    #print(fileList)
+        #print(fileList)
 
-    elevationFull = 0
-    pixelHeight = 0
-    pixelWidth = 0
+        elevationFull = 0
+        pixelHeight = 0
+        pixelWidth = 0
 
-    (startRow,startCol) = (0,0)
-    (endRow,endCol) = (0,0)
+        (startRow,startCol) = (0,0)
+        (endRow,endCol) = (0,0)
 
-    print("\nGathering elevation data...")
+        print("\nGathering elevation data...")
 
-    if (len(fileList)) == 1:
-        
-        filePath = absolute_path + "/geotiff/" + fileList[0]
-        dataset = rasterio.open(filePath)
-
-        dataHeight = dataset.height #number of pixels high, only used for finding true height of one pixel
-        dataWidth = dataset.width #number of pixels wide, only used for finding true width of one pixel
-
-        (ULClong, ULClat) = dataset.transform * (0,0) #upper left corner coords
-        (LRClong, LRClat) = dataset.transform * (dataset.width,dataset.height) #lower right corner coords
-
-        elevationFull = dataset.read(1) #elevation data for every pixel
-
-        #these take long, lat instead of lat, long
-        #generates the indices that correspond to the given latitude and longitude
-        (startRow,startCol) = dataset.index(boxTL[1],boxTL[0])
-        (endRow,endCol) = dataset.index(boxBR[1],boxBR[0]) 
-
-
-    if (len(fileList)) == 2:
-        dataPath0 = absolute_path + "/geotiff/" + fileList[1] #top/left file
-        dataPath1 = absolute_path + "/geotiff/" + fileList[0] #bottom/right file
-
-        dataset0 = rasterio.open(dataPath0)
-        dataset1 = rasterio.open(dataPath1)
-
-        elevationData0 = dataset0.read(1)
-        elevationData1 = dataset1.read(1)
-
-        (ULClong, ULClat) = dataset0.transform * (0,0) #upper left corner coords
-        (LRClong, LRClat) = dataset1.transform * (dataset1.width,dataset1.height) #lower right corner coords
-
-        (startRow,startCol) = dataset0.index(boxTL[1],boxTL[0])
-        (endRow,endCol) = dataset1.index(boxBR[1],boxBR[0])
-
-        dataWidth0 = dataset0.width
-        dataHeight0 = dataset0.height
-
-        dataWidth1 = dataset1.width
-        dataHeight1 = dataset1.height
-        
-        vertical = False #whether or not the file is to be concatenated vertically
-        horizontal = False
-        if(resolution == '1'):
-            if int(fileList[0][8:10]) != int(fileList[1][8:10]):
-                vertical = True
-            if int(fileList[0][11:14]) != int(fileList[1][11:14]):
-                horizontal = True
-
-        elif(resolution == '1/3'):
-            if int(fileList[0][9:11]) != int(fileList[1][9:11]):
-                vertical = True
-            if int(fileList[0][12:15]) != int(fileList[1][12:15]):
-                horizontal = True
-
-        else:
-            print("Invalid resolution given")
-            exit()
-
-        if vertical:
-            print("Combining vertically")
+        if (len(fileList)) == 1:
             
-            #this just seems to be the correct offset for vertically and horizontally appending elevation files
-            i = 12
-            while i > 0:
-                elevationData0 = numpy.delete(elevationData0,i+dataHeight0-13,axis=0)
-                i-=1
+            filePath = absolute_path + "/geotiff/" + fileList[0]
+            dataset = rasterio.open(filePath)
 
-            dataHeight0 = len(elevationData0) #height of the first file, used for index offset
+            dataHeight = dataset.height #number of pixels high, only used for finding true height of one pixel
+            dataWidth = dataset.width #number of pixels wide, only used for finding true width of one pixel
 
-            elevationFull = numpy.append(elevationData0,elevationData1,axis=0)
+            (ULClong, ULClat) = dataset.transform * (0,0) #upper left corner coords
+            (LRClong, LRClat) = dataset.transform * (dataset.width,dataset.height) #lower right corner coords
 
-            dataWidth = len(elevationFull[0])
-            dataHeight = len(elevationFull)
+            elevationFull = dataset.read(1) #elevation data for every pixel
 
-            endRow = endRow + dataHeight0 #offset ending index
+            #these take long, lat instead of lat, long
+            #generates the indices that correspond to the given latitude and longitude
+            (startRow,startCol) = dataset.index(boxTL[1],boxTL[0])
+            (endRow,endCol) = dataset.index(boxBR[1],boxBR[0]) 
 
-            #print(startRow,startCol,endRow,endCol)
 
-        elif horizontal:
-            print("Combining laterally")
+        if (len(fileList)) == 2:
+            dataPath0 = absolute_path + "/geotiff/" + fileList[1] #top/left file
+            dataPath1 = absolute_path + "/geotiff/" + fileList[0] #bottom/right file
 
-            #this just seems to be the correct offset for vertically and horizontally appending elevation files
+            dataset0 = rasterio.open(dataPath0)
+            dataset1 = rasterio.open(dataPath1)
+
+            elevationData0 = dataset0.read(1)
+            elevationData1 = dataset1.read(1)
+
+            (ULClong, ULClat) = dataset0.transform * (0,0) #upper left corner coords
+            (LRClong, LRClat) = dataset1.transform * (dataset1.width,dataset1.height) #lower right corner coords
+
+            (startRow,startCol) = dataset0.index(boxTL[1],boxTL[0])
+            (endRow,endCol) = dataset1.index(boxBR[1],boxBR[0])
+
+            dataWidth0 = dataset0.width
+            dataHeight0 = dataset0.height
+
+            dataWidth1 = dataset1.width
+            dataHeight1 = dataset1.height
+            
+            vertical = False #whether or not the file is to be concatenated vertically
+            horizontal = False
+            if(resolution == '1'):
+                if int(fileList[0][8:10]) != int(fileList[1][8:10]):
+                    vertical = True
+                if int(fileList[0][11:14]) != int(fileList[1][11:14]):
+                    horizontal = True
+
+            elif(resolution == '1/3'):
+                if int(fileList[0][9:11]) != int(fileList[1][9:11]):
+                    vertical = True
+                if int(fileList[0][12:15]) != int(fileList[1][12:15]):
+                    horizontal = True
+
+            else:
+                print("Invalid resolution given")
+                exit()
+
+            if vertical:
+                print("Combining vertically")
+                
+                #this just seems to be the correct offset for vertically and horizontally appending elevation files
+                i = 12
+                while i > 0:
+                    elevationData0 = numpy.delete(elevationData0,i+dataHeight0-13,axis=0)
+                    i-=1
+
+                dataHeight0 = len(elevationData0) #height of the first file, used for index offset
+
+                elevationFull = numpy.append(elevationData0,elevationData1,axis=0)
+
+                dataWidth = len(elevationFull[0])
+                dataHeight = len(elevationFull)
+
+                endRow = endRow + dataHeight0 #offset ending index
+
+                #print(startRow,startCol,endRow,endCol)
+
+            elif horizontal:
+                print("Combining laterally")
+
+                #this just seems to be the correct offset for vertically and horizontally appending elevation files
+                i = 12
+                while i > 0:
+                    elevationData0 = numpy.delete(elevationData0,i+dataWidth0-13,axis=1)
+                    i-=1
+                
+                dataWidth0 = len(elevationData0[0]) #width of the first file, used for the index offset 
+
+                elevationFull = numpy.append(elevationData0,elevationData1,axis=1)
+                
+                dataWidth = len(elevationFull[0])
+                dataHeight = len(elevationFull)
+
+                endCol = endCol + dataWidth0 #offset ending index
+            else:
+                print("Something has gone amiss")
+                yield {"data": "fileError", "status": "failure"}
+
+
+        if (len(fileList)) == 4:
+            print("Combining all files")
+
+            dataPath0 = absolute_path + "/geotiff/" + fileList[3] #top left
+            dataPath1 = absolute_path + "/geotiff/" + fileList[2] #top right
+            dataPath2 = absolute_path + "/geotiff/" + fileList[1] #bottom left 
+            dataPath3 = absolute_path + "/geotiff/" + fileList[0] #bottom right 
+
+            dataset0 = rasterio.open(dataPath0)
+            dataset1 = rasterio.open(dataPath1)
+            dataset2 = rasterio.open(dataPath2)
+            dataset3 = rasterio.open(dataPath3)
+
+            elevationData0 = dataset0.read(1) #top left
+            elevationData1 = dataset1.read(1) #top right
+            elevationData2 = dataset2.read(1) #bottom left
+            elevationData3 = dataset3.read(1) #bottom right
+
+            dataWidth0 = dataset0.width
+            dataWidth2 = dataset2.width
+
+            (ULClong, ULClat) = dataset0.transform * (0,0) #upper left corner coords
+            (LRClong, LRClat) = dataset3.transform * (dataset3.width,dataset3.height) #lower right corner coords
+
+            (startRow,startCol) = dataset0.index(boxTL[1],boxTL[0])
+            (endRow,endCol) = dataset3.index(boxBR[1],boxBR[0])
+
+            #combine top left and top right
             i = 12
             while i > 0:
                 elevationData0 = numpy.delete(elevationData0,i+dataWidth0-13,axis=1)
                 i-=1
             
             dataWidth0 = len(elevationData0[0]) #width of the first file, used for the index offset 
+            elevationTop = numpy.append(elevationData0,elevationData1,axis=1)
 
-            elevationFull = numpy.append(elevationData0,elevationData1,axis=1)
-            
-            dataWidth = len(elevationFull[0])
+            #combine bottom left and right
+            i = 12
+            while i > 0:
+                elevationData2 = numpy.delete(elevationData2,i+dataWidth2-13,axis=1)
+                i-=1
+
+            dataWidth2 = len(elevationData2[0]) #width of the third file, NOt used for index offset (should be same as dataWidth0)
+            elevationBottom = numpy.append(elevationData2,elevationData3,axis=1)
+
+            dataHeight0 = len(elevationTop)
+
+            i = 12
+            while i > 0:
+                elevationTop = numpy.delete(elevationTop,i+dataHeight0-13,axis=0)
+                i-=1
+
+            dataHeight0 = len(elevationData0) #height of the first file, used for index offset
+            elevationFull = numpy.append(elevationTop,elevationBottom,axis=0)
+
             dataHeight = len(elevationFull)
+            dataWidth = len(elevationFull[0])
 
-            endCol = endCol + dataWidth0 #offset ending index
-        else:
-            print("Something has gone amiss")
+            endRow = endRow + dataHeight0
+            endCol = endCol + dataWidth0
+            
 
+        point1 = (ULClat,ULClong) #upper left corner
+        point2 = (ULClat,LRClong) #upper right corner
+        point3 = (LRClat,ULClong) #lower left corner
 
-    if (len(fileList)) == 4:
-        print("Combining all files")
+        metersWidth = haversine(point1,point2)*1000 #calculates distance between top corners
+        metersHeight = haversine(point1,point3)*1000 #calculates distance between left corners
 
-        dataPath0 = absolute_path + "/geotiff/" + fileList[3] #top left
-        dataPath1 = absolute_path + "/geotiff/" + fileList[2] #top right
-        dataPath2 = absolute_path + "/geotiff/" + fileList[1] #bottom left 
-        dataPath3 = absolute_path + "/geotiff/" + fileList[0] #bottom right 
+        pixelWidth = metersWidth/dataWidth
+        pixelHeight = metersHeight/dataHeight
 
-        dataset0 = rasterio.open(dataPath0)
-        dataset1 = rasterio.open(dataPath1)
-        dataset2 = rasterio.open(dataPath2)
-        dataset3 = rasterio.open(dataPath3)
+        #print(pixelHeight,pixelWidth)
+        #print(pixelHeight/pixelWidth)
+        #print(elevationData)
+        #print(startRow,startCol,endRow,endCol)
+        #generate a smaller dataset to work with instead of the entire map
 
-        elevationData0 = dataset0.read(1) #top left
-        elevationData1 = dataset1.read(1) #top right
-        elevationData2 = dataset2.read(1) #bottom left
-        elevationData3 = dataset3.read(1) #bottom right
+        i = startRow
+        smallData = numpy.zeros((abs(startRow-endRow),abs(startCol-endCol)))
+        while i < endRow:
+            j = startCol
+            while j < endCol:
+                smallData[i-startRow][j-startCol] = int(elevationFull[i][j])
+                j+=1
+            i+=1
 
-        dataWidth0 = dataset0.width
-        dataWidth2 = dataset2.width
+        #print(startRow,startCol,endRow,endCol)
+        for msg in generateSTL(smallData,pixelHeight,pixelWidth):
+            yield msg
 
-        (ULClong, ULClat) = dataset0.transform * (0,0) #upper left corner coords
-        (LRClong, LRClat) = dataset3.transform * (dataset3.width,dataset3.height) #lower right corner coords
+        def convert_stl_to_glb(input_stl_path, output_glb_path):
+            try:
+                # Load the STL file
+                mesh = trimesh.load(input_stl_path)
 
-        (startRow,startCol) = dataset0.index(boxTL[1],boxTL[0])
-        (endRow,endCol) = dataset3.index(boxBR[1],boxBR[0])
+                # Export the mesh as a GLB file
+                mesh.export(output_glb_path, file_type='glb')
 
-        #combine top left and top right
-        i = 12
-        while i > 0:
-            elevationData0 = numpy.delete(elevationData0,i+dataWidth0-13,axis=1)
-            i-=1
+                print(f"Successfully converted '{input_stl_path}' to '{output_glb_path}'\n")
+            except Exception as e:
+                print(f"Error during conversion: {e}")
         
-        dataWidth0 = len(elevationData0[0]) #width of the first file, used for the index offset 
-        elevationTop = numpy.append(elevationData0,elevationData1,axis=1)
-
-        #combine bottom left and right
-        i = 12
-        while i > 0:
-            elevationData2 = numpy.delete(elevationData2,i+dataWidth2-13,axis=1)
-            i-=1
-
-        dataWidth2 = len(elevationData2[0]) #width of the third file, NOt used for index offset (should be same as dataWidth0)
-        elevationBottom = numpy.append(elevationData2,elevationData3,axis=1)
-
-        dataHeight0 = len(elevationTop)
-
-        i = 12
-        while i > 0:
-            elevationTop = numpy.delete(elevationTop,i+dataHeight0-13,axis=0)
-            i-=1
-
-        dataHeight0 = len(elevationData0) #height of the first file, used for index offset
-        elevationFull = numpy.append(elevationTop,elevationBottom,axis=0)
-
-        dataHeight = len(elevationFull)
-        dataWidth = len(elevationFull[0])
-
-        endRow = endRow + dataHeight0
-        endCol = endCol + dataWidth0
-        
-
-    point1 = (ULClat,ULClong) #upper left corner
-    point2 = (ULClat,LRClong) #upper right corner
-    point3 = (LRClat,ULClong) #lower left corner
-
-    metersWidth = haversine(point1,point2)*1000 #calculates distance between top corners
-    metersHeight = haversine(point1,point3)*1000 #calculates distance between left corners
-
-    pixelWidth = metersWidth/dataWidth
-    pixelHeight = metersHeight/dataHeight
-
-    #print(pixelHeight,pixelWidth)
-    #print(pixelHeight/pixelWidth)
-    #print(elevationData)
-    #print(startRow,startCol,endRow,endCol)
-    #generate a smaller dataset to work with instead of the entire map
-
-    i = startRow
-    smallData = numpy.zeros((abs(startRow-endRow),abs(startCol-endCol)))
-    while i < endRow:
-        j = startCol
-        while j < endCol:
-            smallData[i-startRow][j-startCol] = int(elevationFull[i][j])
-            j+=1
-        i+=1
-
-    #print(startRow,startCol,endRow,endCol)
-    for msg in generateSTL(smallData,pixelHeight,pixelWidth):
-        yield msg
-
-    def convert_stl_to_glb(input_stl_path, output_glb_path):
-        try:
-            # Load the STL file
-            mesh = trimesh.load(input_stl_path)
-
-            # Export the mesh as a GLB file
-            mesh.export(output_glb_path, file_type='glb')
-
-            print(f"Successfully converted '{input_stl_path}' to '{output_glb_path}'")
-        except Exception as e:
-            print(f"Error during conversion: {e}")
-    yield "Converting to .glb"
-    convert_stl_to_glb(os.path.join('STL_Files',outputFileName + '.stl'), os.path.join('static','glb_files',outputFileName + '.glb'))
-    yield "Complete!"
+        yield {"data": "Converting to .glb", "status": "ok"}
+        convert_stl_to_glb(os.path.join('STL_Files','gen',outputFileName + '.stl'), os.path.join('static','glb_files','gen',outputFileName + '.glb'))
+        yield {"data": "Complete!", "status": "ok"}
+    else:
+        yield {"data": "Failure occured", "status": "ok"}
 
 if __name__ == "__main__":
-    for val in coords2threeD():
+    for val in coords2threeD(outputFileName="dummy"):
         pass

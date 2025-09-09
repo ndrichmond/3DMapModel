@@ -1,17 +1,38 @@
 from flask import Flask, Response, request, jsonify, render_template
-import subprocess
-import folium
 from folium.plugins import Draw
+from pathlib import Path
 from generator import coords2threeD
-import time
+
+import json
+import folium
+import os
+
 
 app = Flask(__name__)
 bbox = {}
-def run_my_program(bbox):
-    # Replace with your real processing function
-    #print("Running backend program...")
-    coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'])
-    return {"file_generated_at": bbox, "status": "ok"}
+
+def rmFilesInFolder(folder_path,numFiles,numFilesToDelete=0):
+    if getFileCount(folder_path) > numFiles:
+        files = []
+        for filename in os.listdir(folder_path):
+            file_path = os.path.join(folder_path, filename)
+            if os.path.isfile(file_path) and filename != "README.md":  # Ensure it's a file, not a subdirectory
+                timestamp = os.path.getmtime(file_path)
+                files.append((timestamp, file_path))
+        files.sort()
+
+        if numFilesToDelete == 0:
+            numFilesToDelete = len(files)
+
+        filesToDelete = files[:numFilesToDelete]
+
+        for timestamp, filepath in filesToDelete:
+            os.remove(filepath)
+
+def getFileCount(folder_path):
+    path = Path(folder_path)
+    file_count = sum(1 for item in path.rglob('*') if item.is_file())
+    return file_count
 
 @app.route("/")
 def index():
@@ -54,7 +75,6 @@ def index():
 def process():
     data = request.json or {}
     coords = data.get('geometry', {}).get('coordinates', [[]])
-
     ring = coords[0] if coords and isinstance(coords[0], list) else []
     if not ring:
         return jsonify(error="No coordinates received"), 400
@@ -64,19 +84,33 @@ def process():
     lats = [pt[1] for pt in ring]
     global bbox
     bbox = {
-        "min_lon": min(lons), "max_lon": max(lons),
-        "min_lat": min(lats), "max_lat": max(lats)
+        "min_lon": min(lons), 
+        "max_lon": max(lons),
+        "min_lat": min(lats), 
+        "max_lat": max(lats),
+        "resolution": data["properties"]["resolution"],
+        "filename": data["properties"]["name"]
     }
 
-    #result = run_my_program(bbox)
-    return {"file_generated_at": bbox, "status": "ok"}
+    glbFilePath = os.path.join('static/','glb_files/','gen/')
+    stlFilePath = os.path.join('STL_Files/','gen/')
+    geotiffFilePath = 'geotiff/'
+
+    rmFilesInFolder(glbFilePath,10,5) #remove all the files if there are more than 10 in the folder
+    rmFilesInFolder(stlFilePath,10,5)
+    rmFilesInFolder(geotiffFilePath,10,5)
+
+    return {"file_requrested_at": bbox, "status": "ok"}
 
 @app.route("/stream")
 def stream():
-    # Example SSE generator
     def generate():
-        for update in coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon']):
-            yield f"data: {update}\n\n"
+        for update in coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'],resolution=bbox['resolution'],outputFileName=bbox["filename"]):
+            yield f"data: {json.dumps(update)}\n\n"
+            if update["status"] == "failure":
+                if update["data"] == "fileError":
+                    rmFilesInFolder('geotiff/',0)
+                break
     return Response(generate(), mimetype='text/event-stream')
 
 if __name__ == "__main__":
