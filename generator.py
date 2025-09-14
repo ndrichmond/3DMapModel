@@ -3,12 +3,13 @@ import os
 import requests
 import numpy
 import rasterio
-import wget
+#import wget
 import trimesh
-import time
 import math
+import time
 from stl import mesh
 from haversine import haversine
+import uuid
 
 '''
 (topLat,leftLong) = (41.503351, -122.347241)
@@ -21,7 +22,12 @@ outputFileName = "test" #name for output file
 unit = 'm' #options are 'm' (metric, 1cm is 1km) or 'in' (imperial, 1in is 1mi)
 '''
 
-def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296212,RL=-122.029142,resolution="1",heightScalar=1,unit='m'):
+
+def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296212,RL=-122.029142,resolution="1",heightScalar=1,unit='m',taskId=1000):
+    
+    def printID(message):
+        print(f"[{taskId}]: {message}")
+    
     (topLat,leftLong) = (TL, LL)
     (botLat,rightLong) = (BL, RL)
 
@@ -30,8 +36,8 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
 
     proceed = True
 
-    if abs(boxBR[0] - boxTL[0]) > 1 or abs(boxBR[1]-boxTL[1]) > 1 or (resolution == "1/3" and (abs(boxBR[0] - boxTL[0]) > 0.5 or abs(boxBR[1]-boxTL[1]) > 0.5)):
-        print("Area too big, pick a new area")
+    if abs(boxBR[0] - boxTL[0]) > 0.6 or abs(boxBR[1]-boxTL[1]) > 0.6 or (resolution == "1/3" and (abs(boxBR[0] - boxTL[0]) > 0.2 or abs(boxBR[1]-boxTL[1]) > 0.2)):
+        print(f"[{taskId}]: Area too big, pick a new area")
         yield {"data": "massiveArea", "status":"failure"}
         proceed = False
 
@@ -40,7 +46,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
 
     def generateSTL(heights,widthMult,heightMult):
         yield {"data":"Generating STL file...", "status": "ok"}
-        print("\nGenerating STL file...")
+        print(f"\n[{taskId}]: Generating STL file...")
         lenDataset =  len(heights)
         widthDataset =len(heights[0])
 
@@ -99,7 +105,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         while i < widthDataset:
             vertices.append([(lenDataset-1)*widthMult,i*heightMult,verticeDepth])
             i+=1
-        print("Vertices complete, creating polygons")
+        print(f"[{taskId}]: Vertices complete, creating polygons")
         # Define the triangles composing the object
         faces = []
 
@@ -153,7 +159,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         vertices = numpy.array(vertices)
         faces = numpy.array(faces)
 
-        print("Polygons complete, scaling and generating mesh")
+        print(f"[{taskId}]: Polygons complete, scaling and generating mesh")
 
         # Create the mesh
 
@@ -175,7 +181,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         #print(fileName)
         shape.rotate([0,0,1],math.radians(90))
         shape.save(fileName)
-        print("File generated!")
+        print(f"[{taskId}]: File generated!")
 
     def getFiles(botLat,leftLong,topLat,rightLong,resolution):
 
@@ -188,7 +194,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         elif(resolution == '1'):
             highRes = False
         else:
-            print("\nInvalid Resolution")
+            print(f"\n[{taskId}]: Invalid Resolution")
             exit()
 
         url = "https://tnmaccess.nationalmap.gov/api/v1/products?datasets=National%20Elevation%20Dataset%20(NED)&bbox="+boundingBox+"&prodFormat=GeoTIFF&prodExtents=1%20x%201%20degree"
@@ -196,14 +202,14 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         payload = {}
         headers = {}
         yield {"data": "Attempting request...", "status": "ok"}
-        print("\nAttempting request...")
+        print(f"\n[{taskId}]: Attempting request...")
 
         response = requests.request("GET", url, headers=headers, data=payload)
         #print(response.text)
         jsonDict = json.loads(response.text)
 
         yield{"data": "Request successful", "status": "ok"}
-        print("Request complete")
+        print(f"[{taskId}]: Request complete")
 
         #print(jsonDict["items"])
 
@@ -226,30 +232,57 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
                     else:
                         nameUrlDict['1_' + item['title'][18:25]] = item['urls']["TIFF"] #use 18:25 for 1 arc second
                     count+=1
-                except: KeyError
+                except KeyError:
+                    print(f"[{taskId}]: key error in file loading")
+                    yield {"data": "keyError", "status": "failure"}
 
         #print(nameUrlDict)
-        print("\n" + str(count)+" High resolution file(s) found")
+        print(f"\n[{taskId}]: {str(count)} file(s) found")
 
         relative_path = "geotiff/"
         full_path = os.path.join(absolute_path, relative_path)
 
-        dir_list = os.listdir(full_path) #list of files in the geotiff folder
 
-        print(str(len(nameUrlDict)) + " file(s) required\n")
+        print(f"[{taskId}]: {str(len(nameUrlDict))} file(s) required\n")
+        dir_list = os.listdir(full_path) #list of files in the geotiff folder
         for key in nameUrlDict:
             keyInList = False
             for file in dir_list:
                 if key in file:
-                    print("File " + key + " already downloaded")
+                    print(f"[{taskId}]: File {key} downloaded")
                     keyInList = True
+                    #TODO: Add logic for if the file is currently downloading but not complete
             if not(keyInList):
                 yield {"data": "Downloading necessary files (this may take a minute)", "status": "ok"}
-                print("Downloading " + key + " file:")
-                wget.download(nameUrlDict[key] , full_path)
+                print(f"[{taskId}]: Downloading {key} file...")
+
+                #wget.download(nameUrlDict[key] , full_path)
+                uid = uuid.uuid4()
+                output_filename = os.path.join(full_path,f"{key}_{uid}.tif.tmp") #location for the file to go as a temporary file
+                try: 
+                    with requests.get(nameUrlDict[key], stream=True) as r:
+                        r.raise_for_status()  # make sure we got a successful response
+                        with open(output_filename, "wb") as f:
+                            for chunk in r.iter_content(chunk_size=66560):
+                                f.write(chunk)
+                    os.rename(output_filename, os.path.join(full_path, f"{key}_{uid}.tif"))
+                    fileDownloaded = True
+                    print(f"[{taskId}]: File downloaded")
+                except requests.exceptions.HTTPError as http_err:
+                    print(f"[{taskId}]: HTTP error occurred: {http_err}")
+                    yield {"data": f"HTTP error occurred: {http_err}", "status": "failure"}  # e.g., 404 Not Found
+                except requests.exceptions.ConnectionError as conn_err:
+                    print(f"[{taskId}]: Connection error occurred: {conn_err}")
+                    yield {"data": f"Connection error occurred: {conn_err}", "status": "failure"}  # e.g., network down
+                except requests.exceptions.Timeout as timeout_err:
+                    print(f"[{taskId}]: Timeout error occurred: {timeout_err}")  # server too slow
+                    yield {"data": f"Timeout error occurred: {timeout_err}", "status": "failure"}
+                except requests.exceptions.RequestException as req_err:
+                    print(f"[{taskId}]: Other error occurred: {req_err}")  # catch all for Requests exceptions
+                    yield {"data": f"Other API error occurred: {req_err}", "status": "failure"}
                 print("")
         yield {"data": "All files acquired", "status": "ok"}
-        print("All files acquired")
+        print(f"[{taskId}]: All files acquired")
 
         # prints all files
         #print(dir_list)
@@ -275,7 +308,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         try:
             while True:
                 yield(next(output))
-        except StopIteration as e:
+        except StopIteration as e: #reads a 'return' instead of a 'yield'
             finalOutput = e.value
 
         fileList = finalOutput
@@ -289,8 +322,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         (startRow,startCol) = (0,0)
         (endRow,endCol) = (0,0)
 
-        print("\nGathering elevation data...")
-
+        print(f"\n[{taskId}]: Gathering elevation data...")
         if (len(fileList)) == 1:
             
             filePath = absolute_path + "/geotiff/" + fileList[0]
@@ -310,7 +342,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
             (endRow,endCol) = dataset.index(boxBR[1],boxBR[0]) 
 
 
-        if (len(fileList)) == 2:
+        elif (len(fileList)) == 2:
             dataPath0 = absolute_path + "/geotiff/" + fileList[1] #top/left file
             dataPath1 = absolute_path + "/geotiff/" + fileList[0] #bottom/right file
 
@@ -335,23 +367,23 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
             vertical = False #whether or not the file is to be concatenated vertically
             horizontal = False
             if(resolution == '1'):
-                if int(fileList[0][8:10]) != int(fileList[1][8:10]):
+                if int(fileList[0][3:5]) != int(fileList[1][3:5]):
                     vertical = True
-                if int(fileList[0][11:14]) != int(fileList[1][11:14]):
+                if int(fileList[0][6:9]) != int(fileList[1][6:9]):
                     horizontal = True
 
             elif(resolution == '1/3'):
-                if int(fileList[0][9:11]) != int(fileList[1][9:11]):
+                if int(fileList[0][4:6]) != int(fileList[1][4:6]):
                     vertical = True
-                if int(fileList[0][12:15]) != int(fileList[1][12:15]):
+                if int(fileList[0][7:10]) != int(fileList[1][7:10]):
                     horizontal = True
 
             else:
-                print("Invalid resolution given")
-                exit()
+                print(f"[{taskId}]: Invalid resolution given")
+                yield {"data": "invalidResolution", "status": "failure"}
 
             if vertical:
-                print("Combining vertically")
+                print(f"[{taskId}]: Combining vertically")
                 
                 #this just seems to be the correct offset for vertically and horizontally appending elevation files
                 i = 12
@@ -371,7 +403,7 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
                 #print(startRow,startCol,endRow,endCol)
 
             elif horizontal:
-                print("Combining laterally")
+                print(f"[{taskId}]: Combining laterally")
 
                 #this just seems to be the correct offset for vertically and horizontally appending elevation files
                 i = 12
@@ -388,12 +420,12 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
 
                 endCol = endCol + dataWidth0 #offset ending index
             else:
-                print("Something has gone amiss")
+                print(f"[{taskId}]: Something has gone amiss")
                 yield {"data": "fileError", "status": "failure"}
 
 
-        if (len(fileList)) == 4:
-            print("Combining all files")
+        elif (len(fileList)) == 4:
+            print(f"[{taskId}]: Combining all files")
 
             dataPath0 = absolute_path + "/geotiff/" + fileList[3] #top left
             dataPath1 = absolute_path + "/geotiff/" + fileList[2] #top right
@@ -453,7 +485,9 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
             endRow = endRow + dataHeight0
             endCol = endCol + dataWidth0
             
-
+        else:
+            printID("Files could not be found")
+            yield {"data": "terrainFileNotFound", "status": "failure"}
         point1 = (ULClat,ULClong) #upper left corner
         point2 = (ULClat,LRClong) #upper right corner
         point3 = (LRClat,ULClong) #lower left corner
@@ -487,20 +521,30 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
             try:
                 # Load the STL file
                 mesh = trimesh.load(input_stl_path)
-
                 # Export the mesh as a GLB file
                 mesh.export(output_glb_path, file_type='glb')
 
-                print(f"Successfully converted '{input_stl_path}' to '{output_glb_path}'\n")
+                print(f"[{taskId}]: Successfully converted '{input_stl_path}' to '{output_glb_path}'\n")
             except Exception as e:
-                print(f"Error during conversion: {e}")
+                print(f"[{taskId}]: Error during conversion: {e}")
+                yield {"data": f"internal server error, {e}", "status": "failure"}
         
+        print(f"[{taskId}]: Converting to .glb")
         yield {"data": "Converting to .glb", "status": "ok"}
-        convert_stl_to_glb(os.path.join('STL_Files','gen',outputFileName + '.stl'), os.path.join('static','glb_files','gen',outputFileName + '.glb'))
+        for msg in convert_stl_to_glb(os.path.join('STL_Files','gen',outputFileName + '.stl'), os.path.join('static','glb_files','gen',outputFileName + '.glb')):
+            yield msg
+        print(f"[{taskId}]: Complete")
         yield {"data": "Complete!", "status": "ok"}
     else:
         yield {"data": "Failure occured", "status": "ok"}
 
 if __name__ == "__main__":
-    for val in coords2threeD(outputFileName="dummy"):
-        pass
+
+    #(topLat,leftLong) = (27.695413, -108.008474)
+    #(botLat,rightLong) = (27.6, -107.9)
+
+    for val in coords2threeD(outputFileName="test"):
+        if val["status"] == "failure":
+            break
+        else:
+            pass

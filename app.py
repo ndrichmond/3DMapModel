@@ -2,7 +2,7 @@ from flask import Flask, Response, request, jsonify, render_template
 from folium.plugins import Draw
 from pathlib import Path
 from generator import coords2threeD
-
+import random
 import json
 import folium
 import os
@@ -105,12 +105,15 @@ def process():
 @app.route("/stream")
 def stream():
     def generate():
-        for update in coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'],resolution=bbox['resolution'],outputFileName=bbox["filename"]):
-            yield f"data: {json.dumps(update)}\n\n"
-            if update["status"] == "failure":
-                if update["data"] == "fileError":
-                    rmFilesInFolder('geotiff/',0)
-                break
+        try:
+            for update in coords2threeD(TL=bbox['max_lat'],LL=bbox['min_lon'],BL=bbox['min_lat'],RL=bbox['max_lon'],resolution=bbox['resolution'],outputFileName=bbox["filename"],taskId=random.randint(1000,9999)):
+                yield f"data: {json.dumps(update)}\n\n"
+                if update["status"] == "failure":
+                    if update["data"] == "fileError":
+                        rmFilesInFolder('geotiff/',0)
+                    break
+        except KeyError:
+            yield f"data: {json.dumps({"data": "keyError", "status": "failure"})}"
     return Response(generate(), mimetype='text/event-stream')
 
 if __name__ == "__main__":

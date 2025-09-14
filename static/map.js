@@ -69,7 +69,7 @@ window.addEventListener('load', function() {
             //console.log("Closing SSE");
             modelViewer = document.getElementById('previewModel');
             loadingOverlay.style.opacity = "0";
-            modelViewer.src = `/static/glb_files/gen/${filename}.glb?cachebust=${Date.now()}`;
+            modelViewer.src = `/static/glb_files/gen/${filename}.glb`;
             eventSource.close();
             fulfillingRequest = false;
           }
@@ -78,8 +78,14 @@ window.addEventListener('load', function() {
           if (jsObject.data === 'massiveArea') {
             updateLoadingText("Area too large!")
           }
-          if (jsObject.data === 'fileError') {
+          else if (jsObject.data === 'fileError') {
             updateLoadingText("File error, please try again or refresh the page")
+          }
+          else if (jsObject.data === 'keyError') {
+            updateLoadingText("keyError, try again?")
+          }
+          else {
+            updateLoadingText("Unknown error, please try again or refresh the page")
           }
           console.log(jsObject.data)
           eventSource.close()
