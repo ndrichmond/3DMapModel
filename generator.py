@@ -266,7 +266,6 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
                             for chunk in r.iter_content(chunk_size=66560):
                                 f.write(chunk)
                     os.rename(output_filename, os.path.join(full_path, f"{key}_{uid}.tif"))
-                    fileDownloaded = True
                     print(f"[{taskId}]: File downloaded")
                 except requests.exceptions.HTTPError as http_err:
                     print(f"[{taskId}]: HTTP error occurred: {http_err}")
