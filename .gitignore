@@ -1,3 +1,6 @@
-geotiff/
-STL_Files/
-static/glb_files/
+geotiff/*
+!geotiff/README.md
+STL_Files/gen/*
+!STL_Files/gen/.gitkeep
+static/glb_files/gen/*
+!static/glb_files/gen/.gitkeep

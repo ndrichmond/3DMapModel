@@ -16,7 +16,7 @@ def rmFilesInFolder(folder_path,numFiles,numFilesToDelete=0):
         files = []
         for filename in os.listdir(folder_path):
             file_path = os.path.join(folder_path, filename)
-            if os.path.isfile(file_path) and filename != "README.md":  # Ensure it's a file, not a subdirectory
+            if os.path.isfile(file_path) and (filename != "README.md" or filename != ".gitkeep"):  # Ensure it's a file, not a subdirectory
                 timestamp = os.path.getmtime(file_path)
                 files.append((timestamp, file_path))
         files.sort()
