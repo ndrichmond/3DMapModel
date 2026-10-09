@@ -22,6 +22,18 @@
 
             <button id="sendButton" class="btn btn-primary">Generate 3D Terrain</button>
 
+            <div class="d-flex align-items-center">
+            <label for="squareSize" class="form-label me-2 mb-0">Square Size:</label>
+                <select id="squareSize" class="form-select form-select-sm" style="width: auto;">
+                    <option value="0">Custom Size</option>
+                    <option value="5000">5 km</option>
+                    <option value="10000">10 km</option>
+                    <option value="50000">50 km</option>
+                </select>
+            </div>
+
+            <div class="col-12 d-flex flex-wrap align-items-center gap-1"></div>
+
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="toggle1">
                 <label class="form-check-label" for="toggle1">High Resolution (may take much longer)</label>

@@ -14,22 +14,22 @@ window.addEventListener('load', function() {
     result += Math.random().toString(36).slice(2); 
   }
   return result.slice(0, length); // Trim to the desired length
-}
+  }
 
   // Find the Leaflet map instance
-  var mapVar = null;
+  var map = null;
   for (var k in window) {
-    if (window[k] instanceof L.Map) { mapVar = window[k]; break; }
+    if (window[k] instanceof L.Map) { map = window[k]; break; }
   }
-  if (!mapVar) { console.error("Leaflet map not found"); return; }
+  if (!map) { console.error("Leaflet map not found"); return; }
 
   var drawnItems = new L.FeatureGroup();
-  mapVar.addLayer(drawnItems);
+  map.addLayer(drawnItems);
 
   var lastLayer = null;
 
   // Save the last drawn rectangle
-  mapVar.on(L.Draw.Event.CREATED, function(e) {
+  map.on(L.Draw.Event.CREATED, function(e) {
     var layer = e.layer;
     layer.off('click');
     drawnItems.addLayer(layer);
@@ -37,7 +37,7 @@ window.addEventListener('load', function() {
   });
 
   // When a shape is deleted, update drawnItems + lastLayer
-  mapVar.on(L.Draw.Event.DELETED, function(e) {
+  map.on(L.Draw.Event.DELETED, function(e) {
   drawnItems.clearLayers();
   lastLayer = null;
   });
@@ -116,6 +116,5 @@ window.addEventListener('load', function() {
     else {
       updateLoadingText("Please wait for the previous request to complete")
     }
-
   });
 });
