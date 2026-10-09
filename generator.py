@@ -530,7 +530,12 @@ def coords2threeD(outputFileName='default',TL=41.503351,LL=-122.347241,BL=41.296
         
         print(f"[{taskId}]: Converting to .glb")
         yield {"data": "Converting to .glb", "status": "ok"}
-        for msg in convert_stl_to_glb(os.path.join('STL_Files','gen',outputFileName + '.stl'), os.path.join('static','glb_files','gen',outputFileName + '.glb')):
+
+        input_stl_path = os.path.join(absolute_path, "STL_Files", "gen", outputFileName + ".stl")
+        output_glb_path = os.path.join(absolute_path, "static", "glb_files", "gen", outputFileName + ".glb")
+
+
+        for msg in convert_stl_to_glb(input_stl_path, output_glb_path):
             yield msg
         print(f"[{taskId}]: Complete")
         yield {"data": "Complete!", "status": "ok"}
